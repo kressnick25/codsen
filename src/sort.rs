@@ -3,6 +3,7 @@ use regex::Regex;
 use serde::ser::Serialize;
 use serde_json::{Serializer, Value};
 use std::env;
+use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::Display;
 use std::fs;
@@ -88,76 +89,51 @@ pub fn sort_files(
     indents: usize,
     dry_run: bool,
 ) -> Vec<SortResult> {
-    let mut results: Vec<SortResult> = vec![];
+    if dry_run {
+        files.iter().for_each(|f| {
+            log::debug!("{}", path_to_relative(&f).unwrap_or(INVALID_PATH.into()));
+        });
+        return vec![]
+    }
+
+    files.iter().map(|f| {
+        match sort_and_save(f, use_spaces, sort_arrays, line_ending, indents) {
+            Ok(_) => SortResult {
+                path: f.as_path().into(),
+                error: None,
+            },
+            Err(error) => SortResult {
+                path: f.as_path().into(),
+                error: Some(error),
+            },
+        }
+    }).collect()
+}
+
+pub fn get_files_to_sort(
+    files: &Vec<PathBuf>,
+) -> HashSet<PathBuf> {
+    // use Set to dedupe paths from input
+    let mut results: HashSet<PathBuf> = HashSet::new();
     for path in files {
         if path.is_dir() {
-            for entry in WalkDir::new(path)
+            WalkDir::new(path)
                 .follow_links(true)
                 .into_iter()
                 .filter_map(|e| e.ok())
                 .filter(|e| e.path().is_file())
-            {
-                let entry_path = entry.path();
-                if is_ignored(&entry_path) || is_already_sorted(&entry_path, &results) {
-                    log::debug!("Ignored: {:?}", entry_path.to_str());
-                    continue;
-                }
-                if dry_run {
-                    log::info!("{}", path_to_relative(&entry_path).unwrap_or(INVALID_PATH.into()))
-                } else {
-                    match sort_and_save(&entry_path, use_spaces, sort_arrays, line_ending, indents)
-                    {
-                        Ok(_) => results.push(SortResult {
-                            path: entry_path.into(),
-                            error: None,
-                        }),
-                        Err(error) => results.push(SortResult {
-                            path: entry_path.into(),
-                            error: Some(error),
-                        }),
-                    }
-                }
-            }
-        } else {
-            if !path.exists() {
-                results.push(SortResult {
-                    path: path.as_path().into(),
-                    error: Some(JsonError::NotFound),
+                .map(|entry| entry.path().to_path_buf())
+                .filter(|path| !path.exists() && !is_ignored(path))
+                .for_each(|f| { 
+                    results.insert(f.canonicalize().unwrap_or_default());
                 });
-            }
-            if is_ignored(&path) || is_already_sorted(&path, &results) {
-                log::debug!("Ignored: {:?}", path.to_str());
-                continue;
-            }
-
-            if dry_run {
-                log::info!("{}", path_to_relative(&path).unwrap_or(INVALID_PATH.into()))
-            } else {
-                match sort_and_save(&path, use_spaces, sort_arrays, line_ending, indents) {
-                    Ok(_) => results.push(SortResult {
-                        path: path.as_path().into(),
-                        error: None,
-                    }),
-                    Err(error) => results.push(SortResult {
-                        path: path.as_path().into(),
-                        error: Some(error),
-                    }),
-                }
+        } else {
+            if path.exists() && !is_ignored(path) {
+                results.insert(path.canonicalize().unwrap_or_default());
             }
         }
     }
     results
-}
-
-fn is_already_sorted(path: &Path, results: &Vec<SortResult>) -> bool {
-    results.iter().any(|result| {
-        if !result.path.exists() || !path.exists() {
-            return false;
-        }
-        let result_str = result.path.canonicalize().unwrap_or_default();
-        let path_str = path.canonicalize().unwrap_or_default();
-        result_str == path_str
-    })
 }
 
 fn is_ignored(path: &Path) -> bool {

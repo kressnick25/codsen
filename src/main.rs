@@ -11,7 +11,7 @@ mod lines;
 mod sort;
 
 use crate::lines::LineEnding;
-use crate::sort::{sort_files, SortResult};
+use crate::sort::{sort_files, SortResult, get_files_to_sort};
 
 const APP_NAME: &str = "roast";
 const APP_VERSION: &str = "0.1.0";
@@ -201,8 +201,10 @@ fn main() {
         args.indents
     };
 
+    let to_sort = get_files_to_sort(&files);
+
     let results = sort_files(
-        &files,
+        &to_sort.into_iter().collect(),
         &args.line_ending,
         args.spaces,
         args.arrays,

@@ -5,6 +5,8 @@ use log::{LevelFilter, Level, Metadata, Record};
 use std::{env, io};
 use std::fmt::Display;
 use std::path::PathBuf;
+use std::sync::mpsc::channel;
+use std::thread;
 
 mod formatter;
 mod lines;
@@ -205,29 +207,39 @@ fn main() {
         .iter()
         .map(|buf| buf.clone())
         .collect();
+    let to_sort_len = to_sort.len();
 
-    let results: Vec<SortResult>;
+    let (tx, rx) = channel::<SortResult>();
     if args.dry {
         to_sort.iter().for_each(|f| {
             log::debug!("{}", sort::path_to_relative(&f).unwrap_or(sort::INVALID_PATH.into()));
         });
-        results = vec![];
     } else {
-        results = to_sort.iter()
-            .map(|f| {
+        for f in to_sort {
+            let tx = tx.clone();
+            let use_spaces = args.spaces.clone();
+            let line_ending = args.line_ending.clone();
+            thread::spawn( move || {
                 let res = sort::sort_and_save(
-                    f,
-                    args.spaces,
+                    &f,
+                    use_spaces,
                     args.arrays,
-                    &args.line_ending,
+                    &line_ending,
                     indents
                 );
-                SortResult { 
+                let sort_res = SortResult { 
                     path: f.to_path_buf(), 
-                    error: if res.is_err() { res.err() } else { None }}
-                }
-            )
-            .collect();
+                    error: if res.is_err() { res.err() } else { None }
+                };
+                tx.send(sort_res).unwrap();
+            });
+        }
+    }
+
+    let mut results: Vec<SortResult> = vec![];
+    for _ in 0..to_sort_len {
+        let res = rx.recv().unwrap();
+        results.push(res);
     }
 
     for result in results.iter() {

@@ -11,7 +11,7 @@ mod lines;
 mod sort;
 
 use crate::lines::LineEnding;
-use crate::sort::{sort_files, SortResult, get_files_to_sort};
+use crate::sort::{SortResult, get_files_to_sort};
 
 const APP_NAME: &str = "roast";
 const APP_VERSION: &str = "0.1.0";
@@ -201,16 +201,39 @@ fn main() {
         args.indents
     };
 
-    let to_sort = get_files_to_sort(&files);
+    let to_sort: Vec<PathBuf> = get_files_to_sort(&files)
+        .iter()
+        .map(|buf| buf.clone())
+        .collect();
 
-    let results = sort_files(
-        &to_sort.into_iter().collect(),
-        &args.line_ending,
-        args.spaces,
-        args.arrays,
-        indents,
-        args.dry,
-    );
+    let results: Vec<SortResult>;
+    if args.dry {
+        to_sort.iter().for_each(|f| {
+            log::debug!("{}", sort::path_to_relative(&f).unwrap_or(sort::INVALID_PATH.into()));
+        });
+        results = vec![];
+    } else {
+        results = to_sort.iter()
+            .map(|f| {
+                match sort::sort_and_save(
+                    f,
+                    args.spaces,
+                    args.arrays,
+                    &args.line_ending,
+                    indents
+                ) {
+                    Ok(_) => SortResult {
+                        path: f.to_path_buf(),
+                        error: None,
+                    },
+                    Err(error) => SortResult {
+                        path: f.to_path_buf(),
+                        error: Some(error),
+                    },
+                }
+            })
+            .collect();
+    }
 
     for result in results.iter() {
         log::info!("{}", result)

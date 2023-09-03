@@ -14,7 +14,7 @@ pub use crate::formatter::LineFormatter;
 pub use crate::lines::LineEnding;
 
 
-const INVALID_PATH: &'static str = "INVALID_PATH";
+pub const INVALID_PATH: &'static str = "INVALID_PATH";
 const IGNORED_FILES: &'static [&str] = &[
     "node_modules",
     "package.json",
@@ -44,8 +44,8 @@ pub enum JsonError {
 ///  * `error` - [JsonError] if the sort operation failed 
 /// 
 pub struct SortResult {
-    path: Box<Path>,
-    error: Option<JsonError>,
+    pub path: PathBuf,
+    pub error: Option<JsonError>,
 }
 
 impl SortResult {
@@ -145,7 +145,7 @@ fn is_ignored(path: &Path) -> bool {
     return false;
 }
 
-fn path_to_relative(path: &Path) -> Result<String, Box<dyn Error>> {
+pub fn path_to_relative(path: &Path) -> Result<String, Box<dyn Error>> {
     let current = env::current_dir()?.canonicalize()?;
 
     if let Ok(full) = path.canonicalize() {
@@ -242,7 +242,7 @@ fn sort_json_value(head: &mut Value, sort_arrays: bool) -> &mut Value {
     head
 }
 
-fn sort_and_save(
+pub fn sort_and_save(
     path: &Path,
     use_spaces: bool,
     sort_arrays: bool,

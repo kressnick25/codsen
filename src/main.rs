@@ -215,23 +215,18 @@ fn main() {
     } else {
         results = to_sort.iter()
             .map(|f| {
-                match sort::sort_and_save(
+                let res = sort::sort_and_save(
                     f,
                     args.spaces,
                     args.arrays,
                     &args.line_ending,
                     indents
-                ) {
-                    Ok(_) => SortResult {
-                        path: f.to_path_buf(),
-                        error: None,
-                    },
-                    Err(error) => SortResult {
-                        path: f.to_path_buf(),
-                        error: Some(error),
-                    },
+                );
+                SortResult { 
+                    path: f.to_path_buf(), 
+                    error: if res.is_err() { res.err() } else { None }}
                 }
-            })
+            )
             .collect();
     }
 
